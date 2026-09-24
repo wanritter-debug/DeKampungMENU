@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ดู PDF</title>
+  <style>
+    body { margin: 0; background: #555; }
+    #pages { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; }
+    .page { background: #fff; width: 100%; max-width: 900px; }
+    canvas { display: block; width: 100%; height: auto; }
+    #status { color: #fff; text-align: center; padding: 20px; font-family: sans-serif; }
+    .dl { display: block; width: fit-content; margin: 16px auto 32px;
+      background: #008080; color: #fff; padding: 12px 20px;
+      border-radius: 8px; text-decoration: none; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+  <div id="status">กำลังโหลด...</div>
+  <div id="pages"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const url = 'files/menu.pdf';
+    const container = document.getElementById('pages');
+
+    async function renderPage(pdf, num, wrapper) {
+      const page = await pdf.getPage(num);
+      const base = page.getViewport({ scale: 1 });
+      const targetWidth = Math.min(container.clientWidth, 900);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const scale = (targetWidth / base.width) * dpr;
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      wrapper.appendChild(canvas);
+
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    }
+
+    pdfjsLib.getDocument(url).promise.then(async (pdf) => {
+      document.getElementById('status').remove();
+
+      // เตรียมกรอบว่างของทุกหน้าไว้ก่อน แล้ววาดเมื่อเลื่อนใกล้ถึง
+      const first = await pdf.getPage(1);
+      const v = first.getViewport({ scale: 1 });
+      const ratio = v.height / v.width;
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const w = entry.target;
+            observer.unobserve(w);
+            renderPage(pdf, Number(w.dataset.page), w);
+          }
+        });
+      }, { rootMargin: '600px' });
+
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const w = document.createElement('div');
+        w.className = 'page';
+        w.dataset.page = i;
+        w.style.aspectRatio = `1 / ${ratio}`;
+        container.appendChild(w);
+        observer.observe(w);
+      }
+    }).catch(() => {
+      document.getElementById('status').textContent = 'เปิดไฟล์ไม่ได้ ลองใหม่อีกครั้ง';
+    });
+  </script>
+    <a class="dl" href="files/menu.pdf" download>ดาวน์โหลดเมนู (PDF)</a>
+</body>
+</html>
